@@ -49,13 +49,32 @@ def test_the_windows_app_still_imports():
     import lipflow.win.app  # noqa: F401
 
 
-def test_russian_does_not_need_the_camera():
-    """The span comes from the microphone's own clock, so a camera that sends no frames
-    (switched off, blocked, or absent) must not break Russian dictation."""
+def _bare_app(hud_shown, asr_impl):
+    """A Lipflow without tk, camera or threads: ui() runs inline so the HUD calls are visible."""
+    from lipflow.win.app import Lipflow
+
+    app = Lipflow.__new__(Lipflow)
+    app.ru_asr = asr_impl
+    app.hud = type("HUD", (), {"show": staticmethod(lambda *a, **k: hud_shown.append(a))})()
+    app.ui = lambda fn, *a, **k: fn(*a, **k)
+    return app
+
+
+def _recording(level, seconds=2.0):
     import numpy as np
 
     from lipflow.camera import Recording
-    from lipflow.win.app import Lipflow
+
+    rate = 16_000
+    rec = Recording(started=0.0)  # ts stays empty: the camera produced no frames at all
+    rec.audio = [(100.0 + i / rate, np.full(1600, level, np.float32))
+                 for i in range(0, int(rate * seconds), 1600)]
+    return rec
+
+
+def test_russian_does_not_need_the_camera():
+    """The span comes from the microphone's own clock, so a camera that sends no frames
+    (switched off, blocked, or absent) must not break Russian dictation."""
 
     class FakeASR:
         seen = None
@@ -64,20 +83,36 @@ def test_russian_does_not_need_the_camera():
             FakeASR.seen = wave
             return "привет"
 
-    app = Lipflow.__new__(Lipflow)  # no tk, no camera, no threads
-    app.ru_asr = FakeASR()
-    rec = Recording(started=0.0)  # ts stays empty: the camera produced no frames at all
-    rate = 16_000
-    rec.audio = [(100.0 + i / rate, np.full(1600, 0.01, np.float32)) for i in range(0, rate * 2, 1600)]
+    app = _bare_app([], FakeASR())
+    assert app._ru_candidates(_recording(0.05)) == ["привет"]
+    assert FakeASR.seen is not None and len(FakeASR.seen) >= 16_000  # about two seconds of audio
 
-    assert app._ru_candidates(rec) == ["привет"]
-    assert FakeASR.seen is not None and len(FakeASR.seen) >= rate  # about two seconds of audio
+
+def test_a_silent_microphone_is_reported_as_such():
+    """A muted input still opens a stream and still hands back dither (~3e-5). That is not a
+    recognition failure, and the user must be told which of the two it is."""
+    shown = []
+
+    class NeverCalled:
+        def read(self, wave):  # pragma: no cover - the level check must stop us first
+            raise AssertionError("the recogniser should not run on a silent capture")
+
+    app = _bare_app(shown, NeverCalled())
+    assert app._ru_candidates(_recording(3e-5)) is None
+    assert shown and shown[0][0] == "error" and shown[0][1] == lang.t("mic_silent_title")
 
 
 def test_russian_without_audio_reads_nothing():
-    from lipflow.camera import Recording
-    from lipflow.win.app import Lipflow
+    shown = []
+    app = _bare_app(shown, object())  # never touched
+    assert app._ru_candidates(_recording(0.05, seconds=0)) is None
+    assert shown and shown[0][1] == lang.t("mic_silent_title")
 
-    app = Lipflow.__new__(Lipflow)
-    app.ru_asr = object()  # never touched
-    assert app._ru_candidates(Recording(started=0.0)) is None
+
+def test_silence_and_peak():
+    import numpy as np
+
+    assert asr.peak(None) == 0.0
+    assert asr.peak(np.zeros(0, np.float32)) == 0.0
+    assert asr.silence(np.full(1000, 3e-5, np.float32))  # dither: a muted microphone
+    assert not asr.silence(np.full(1000, 0.05, np.float32))

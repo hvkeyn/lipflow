@@ -517,15 +517,24 @@ class Lipflow:
         """Russian comes from the microphone alone (see lipflow/asr.py): no lips, no camera.
 
         The span is taken from the audio's own clock rather than the camera's frame timestamps,
-        which are empty when the camera is off or blocked."""
+        which are empty when the camera is off or blocked. A capture with no signal in it is
+        reported as a microphone problem - it is not something the model can be blamed for."""
+        from .. import asr
         from ..mic import segment
         chunks = getattr(rec, "audio", None)
-        if self.ru_asr is None or not chunks:
+        if self.ru_asr is None:
+            return None
+        if not chunks:
+            print("[lipflow] the microphone delivered no audio at all")
+            self.ui(self.hud.show, "error", lang.t("mic_silent_title"), lang.t("mic_silent_body"), 4.0)
             return None
         start = chunks[0][0]
         seconds = max(0.2, chunks[-1][0] - start)
         wave = segment(chunks, start, max(1, int(round(seconds * 25))))
-        if wave is None:
+        if asr.silence(wave):
+            print(f"[lipflow] the microphone is silent (peak {asr.peak(wave):.5f}): "
+                  "check the input device and its level")
+            self.ui(self.hud.show, "error", lang.t("mic_silent_title"), lang.t("mic_silent_body"), 4.0)
             return None
         text = self.ru_asr.read(wave)
         return [text] if text else None

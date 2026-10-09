@@ -49,6 +49,7 @@ def doctor() -> int:
         from . import asr
         line(asr.available(), lang.t("doctor_ru_asr"), asr.INSTALL_HINT)
         line(True, lang.t("doctor_ru_ready"))
+        _mic_check(line)
 
     from .cleanup import Cleaner
     c = Cleaner()
@@ -56,6 +57,26 @@ def doctor() -> int:
          + (lang.t("doctor_cleanup_hint") if c.backend == "basic" else ""))
     print("\n" + (lang.t("doctor_ok") if ok else lang.t("doctor_fix")))
     return 0 if ok else 1
+
+
+def _mic_check(line):
+    """Russian reads the microphone, so its level is worth checking before blaming the model.
+
+    A muted or absent input still opens a stream and still hands back buffers - of dither around
+    3e-5 - so the app would otherwise just answer "couldn't read that" forever."""
+    try:
+        import numpy as np
+        import sounddevice as sd
+
+        from .asr import MIC_FLOOR
+        from .mic import RATE
+
+        rec = sd.rec(int(RATE), samplerate=RATE, channels=1, dtype="float32")
+        sd.wait()
+        p = float(np.abs(rec).max())
+        line(p >= MIC_FLOOR, lang.t("doctor_mic", peak=p), lang.t("doctor_mic_fix"))
+    except Exception as e:
+        line(False, lang.t("doctor_mic_error", err=f"{type(e).__name__}: {e}"), "")
 
 
 def _mac_checks(line):

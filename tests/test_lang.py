@@ -182,6 +182,7 @@ def test_doctor_runs_in_both_languages(monkeypatch):
     monkeypatch.setattr(d, "_windows_checks", lambda line: line(True, d.lang.t("doctor_camera", idx=0)))
     monkeypatch.setattr(d, "_linux_checks", lambda line: line(True, d.lang.t("doctor_camera", idx=0)))
     monkeypatch.setattr(d, "_mac_checks", lambda line: line(True, "camera"))
+    monkeypatch.setattr(d, "_mic_check", lambda line: line(True, d.lang.t("doctor_mic", peak=0.05)))
     for code in ("en", "ru"):
         d.lang.set_active(code)
         assert d.doctor() in (0, 1)  # 1 only when a model file is missing

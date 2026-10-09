@@ -19,6 +19,22 @@ import numpy as np
 MODEL = "gigaam-v3-e2e-ctc"
 RATE = 16_000
 INSTALL_HINT = "Russian needs the optional recogniser (GigaAM v3 via onnx-asr): uv sync --extra ru"
+# A muted or absent microphone still opens a stream and still delivers buffers - of dither, around
+# 3e-5. Real speech, even a whisper, is 0.01 and up, and room tone 0.003+. Below this floor there
+# is no signal to recognise, and saying "couldn't read that" hides the actual problem.
+MIC_FLOOR = 0.001
+
+
+def peak(wave) -> float:
+    """Loudest sample in the capture, 0.0 for nothing at all."""
+    if wave is None or getattr(wave, "size", 0) == 0:
+        return 0.0
+    return float(np.abs(np.asarray(wave)).max())
+
+
+def silence(wave) -> bool:
+    """True when the capture carries no signal at all, rather than speech the model failed on."""
+    return peak(wave) < MIC_FLOOR
 
 
 def available() -> bool:

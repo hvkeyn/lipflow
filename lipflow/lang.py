@@ -358,6 +358,8 @@ _EN_UI = {
     "copied": "Copied",
     "nothing_heard": "Couldn't read that",
     "try_slower": "Try again, a little slower",
+    "mic_silent_title": "The microphone hears nothing",
+    "mic_silent_body": "Check the input device and its level in Windows sound settings",
     "whisper_title": "Whisper mode",
     "whisper_downloading": "Downloading the audio-visual model (1.8 GB)…",
     "whisper_download_pct": "Downloading the audio-visual model… {pct:.0f}%",
@@ -381,6 +383,9 @@ _EN_UI = {
     "doctor_camera": "Camera {idx} opens and sends frames",
     "doctor_cleanup": "cleanup backend: {desc}",
     "doctor_cleanup_hint": "  (set ANTHROPIC_API_KEY or run Ollama for much better accuracy)",
+    "doctor_mic": "microphone level: peak {peak:.4f}",
+    "doctor_mic_fix": "Windows sound settings -> Input: choose a device, unmute it and raise its level",
+    "doctor_mic_error": "could not record from the microphone: {err}",
 }
 
 _RU_UI = {
@@ -434,6 +439,8 @@ _RU_UI = {
     "copied": "Скопировано",
     "nothing_heard": "Ничего не расслышал",
     "try_slower": "Попробуйте ещё раз, чуть медленнее",
+    "mic_silent_title": "Микрофон ничего не слышит",
+    "mic_silent_body": "Проверьте устройство записи и его уровень в звуковых параметрах Windows",
     "whisper_title": "Режим шёпота",
     "whisper_downloading": "Скачиваю аудио-визуальную модель (1,8 ГБ)…",
     "whisper_download_pct": "Скачиваю аудио-визуальную модель… {pct:.0f}%",
@@ -457,6 +464,9 @@ _RU_UI = {
     "doctor_camera": "Камера {idx} открывается и отдаёт кадры",
     "doctor_cleanup": "обработка текста: {desc}",
     "doctor_cleanup_hint": "  (задайте ANTHROPIC_API_KEY или запустите Ollama — точность заметно выше)",
+    "doctor_mic": "уровень микрофона: пик {peak:.4f}",
+    "doctor_mic_fix": "Звуковые параметры Windows → Запись: выберите устройство, снимите mute и поднимите уровень",
+    "doctor_mic_error": "не удалось записать с микрофона: {err}",
 }
 
 UI = {"en": _EN_UI, "ru": _RU_UI}
