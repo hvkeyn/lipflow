@@ -446,11 +446,20 @@ class Lipflow:
         print(f"[lipflow] model ready in {time.time() - t:.1f}s "
               f"(encoder on {self.reader.enc_device}, cleanup: {self.cleaner.describe()})")
         self.ui(self._set_state, "Ready")
-        if lang.active() == "ru":
+        ru = lang.active() == "ru"
+        if ru:
             self.jobs.put(("ru_asr",))  # Russian listens through the microphone, not the camera
         elif self.settings.get("whisper"):
             self.jobs.put(("whisper",))
-        if self.opts.onboard or not self.settings.get("onboarded"):
+        if ru:
+            # Nothing to practise or train: Russian is transcribed by a published model, not by
+            # your face, so the setup that records practice clips has nothing to do here.
+            if not self.settings.get("onboarded"):
+                self.settings["onboarded"] = True
+                save_settings(self.settings)
+            self.ui(self.hud.show, "done", "Русский режим готов",
+                    f"Держите {self.key_name} и говорите тихо", 3.0)
+        elif self.opts.onboard or not self.settings.get("onboarded"):
             self.ui(self.hud.hide)
             self.ui(self.show_setup)
         else:

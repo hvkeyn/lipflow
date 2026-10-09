@@ -86,6 +86,25 @@ def test_russian_practice_sentences(tmp_path, monkeypatch):
     assert len(s) == 24 and len(set(s)) == 24 and all(x in O.RUSSIAN for x in s)
 
 
+def test_russian_practice_handles_the_setup_window_asking_for_double(tmp_path, monkeypatch):
+    """The setup window asks for 2x N_SENTENCES so it can drop the ones already practised:
+    a list shorter than that used to raise ValueError and kill the practice page."""
+    import lipflow.personal as P
+    from lipflow import practice as O
+
+    monkeypatch.setattr(P, "PHRASES", str(tmp_path / "none.txt"))
+    lang.set_active("ru")
+    s = O.practice_sentences(O.N_SENTENCES * 2)
+    assert len(s) == len(set(s)) >= O.N_SENTENCES
+    assert all(x in O.RUSSIAN for x in s)
+
+
+def test_russian_practice_list_is_long_enough():
+    from lipflow import practice as O
+
+    assert len(O.RUSSIAN) >= O.N_SENTENCES * 2, "the setup window can ask for 2x N_SENTENCES"
+
+
 def test_cleanup_prompt_follows_the_language():
     from lipflow.cleanup import _user_prompt
 
