@@ -41,6 +41,13 @@ def doctor() -> int:
     else:
         _mac_checks(line)
 
+    from . import lang
+    if lang.active() == "ru":
+        # Russian has no public visual model, so it listens instead of watching (see asr.py).
+        from . import asr
+        line(asr.available(), "Russian recogniser (GigaAM v3 via onnx-asr)", asr.INSTALL_HINT)
+        line(True, "Russian reads the microphone; the camera is not used")
+
     from .cleanup import Cleaner
     c = Cleaner()
     line(True, f"cleanup backend: {c.describe()}"

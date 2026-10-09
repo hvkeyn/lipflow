@@ -26,6 +26,10 @@ dependencies = [
 [project.scripts]
 lipflow = "lipflow.__main__:main"
 
+[project.optional-dependencies]
+# Russian dictation by voice: GigaAM v3 on ONNX, no PyTorch and no FFmpeg (see lipflow/asr.py).
+ru = ["onnx-asr[cpu,hub]>=0.12"]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

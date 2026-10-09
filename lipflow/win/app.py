@@ -16,6 +16,7 @@ import time
 import tkinter as tk
 from dataclasses import dataclass
 
+from .. import lang
 from ..camera import Camera, Recording, mouth_view
 from ..cleanup import CHOICES, Cleaner, unavailable
 from ..dictation import (
@@ -76,6 +77,7 @@ class Lipflow:
         from ..mic import Mic
         self.mic = Mic()
         self.av_reader = None
+        self.ru_asr = None           # Russian reads the microphone instead (see lipflow/asr.py)
         self._ui_busy = False
         self.onboarding = None
         self.onboarding_text = ""
@@ -157,6 +159,10 @@ class Lipflow:
             return Item(key_label(name), lambda icon, item: self.ui(self._pick_key, name),
                         checked=lambda item: self.opts.key == name, radio=True)
 
+        def pick_lang(code):
+            return Item(lang.profile(code).name, lambda icon, item: self.ui(self._pick_lang, code),
+                        checked=lambda item: lang.active() == code, radio=True)
+
         autostart = []
         if sys.platform == "win32":
             autostart = [
@@ -177,6 +183,7 @@ class Lipflow:
             Item("Camera", Menu(*[pick_camera(v) for v in ["auto", *range(CAMERAS)]])),
             Item("Cleanup", Menu(*[pick_cleanup(b) for b in CHOICES])),
             Item("Push-to-talk key", Menu(*[pick_key(k) for k in KEYS])),
+            Item("Язык / Language", Menu(*[pick_lang(c) for c in lang.available()])),
             toggle("whisper", False, then=lambda: self.ui(self._whisper_changed)),
             toggle("use_context"),
             toggle("save_clips"),
@@ -229,6 +236,16 @@ class Lipflow:
         self._install_key()
         self.icon.update_menu()
         self.hud.show("done", "Push-to-talk key", f"Hold {self.key_name} to dictate", 2.0)
+
+    def _pick_lang(self, code: str):
+        """English reads lips; Russian listens (see lipflow/asr.py). Remember the choice."""
+        lang.set_active(code)
+        self.settings["lang"] = code
+        save_settings(self.settings)
+        print(f"[lipflow] language: {lang.profile().name}")
+        if code == "ru" and self.ru_asr is None and not self.loading:
+            self.jobs.put(("ru_asr",))
+        self.ui(self.icon.update_menu)
 
     def _whisper_changed(self):
         if self.settings.get("whisper") and self.av_reader is None and not self.loading:
@@ -407,6 +424,8 @@ class Lipflow:
                     self._train(job[1])
                 elif job[0] == "whisper":
                     self._load_whisper()
+                elif job[0] == "ru_asr":
+                    self._load_ru_asr()
                 elif job[0] == "cleanup":
                     self.cleaner = Cleaner(job[1])
                     print(f"[lipflow] cleanup: {self.cleaner.describe()}")
@@ -427,7 +446,9 @@ class Lipflow:
         print(f"[lipflow] model ready in {time.time() - t:.1f}s "
               f"(encoder on {self.reader.enc_device}, cleanup: {self.cleaner.describe()})")
         self.ui(self._set_state, "Ready")
-        if self.settings.get("whisper"):
+        if lang.active() == "ru":
+            self.jobs.put(("ru_asr",))  # Russian listens through the microphone, not the camera
+        elif self.settings.get("whisper"):
             self.jobs.put(("whisper",))
         if self.opts.onboard or not self.settings.get("onboarded"):
             self.ui(self.hud.hide)
@@ -437,7 +458,12 @@ class Lipflow:
 
     @property
     def whisper_on(self) -> bool:
-        return bool(self.settings.get("whisper")) and self.av_reader is not None and self.onboarding is None
+        """Is the microphone running for this dictation? Russian always listens."""
+        if self.onboarding is not None:
+            return False
+        if lang.active() == "ru":
+            return self.ru_asr is not None
+        return bool(self.settings.get("whisper")) and self.av_reader is not None
 
     def _load_whisper(self):
         from .. import av
@@ -454,6 +480,36 @@ class Lipflow:
         print("[lipflow] whisper mode ready (lips + audio)")
         self.ui(self.hud.show, "done", "Whisper mode on", "Whisper or speak softly while you mouth the words", 3.0)
 
+    def _load_ru_asr(self):
+        """Russian runs on GigaAM through onnx-asr: ready-made, no fine-tuning, no camera."""
+        from .. import asr
+        if not asr.available():
+            self.ui(self.hud.show, "error", "Русский режим", asr.INSTALL_HINT, 6.0)
+            print(f"[lipflow] {asr.INSTALL_HINT}")
+            return
+        self.ui(self.hud.show, "reading", "Русский режим", "Загружаю распознаватель…")
+        try:
+            self.ru_asr = asr.RussianASR()
+        except Exception as e:
+            print(f"[lipflow] Russian recogniser failed: {e.__class__.__name__}: {e}")
+            self.ui(self.hud.show, "error", "Русский режим", str(e)[:80], 5.0)
+            return
+        print(f"[lipflow] Russian mode ready: {self.ru_asr.describe()}")
+        self.ui(self.hud.show, "done", "Русский режим включён",
+                f"Держите {self.key_name} и говорите тихо", 3.0)
+
+    def _ru_candidates(self, rec) -> "list[str] | None":
+        """Russian comes from the microphone alone (see lipflow/asr.py): no lips, no camera."""
+        from ..mic import segment
+        if self.ru_asr is None or not getattr(rec, "audio", None):
+            return None
+        ts, _, _ = rec.snapshot()
+        wave = segment(rec.audio, ts[0], max(1, int(round(rec.duration * 25))))
+        if wave is None:
+            return None
+        text = self.ru_asr.read(wave)
+        return [text] if text else None
+
     def _av_candidates(self, rec, rois):
         from ..mic import segment
         if not self.whisper_on or not getattr(rec, "audio", None):
@@ -467,6 +523,8 @@ class Lipflow:
     def _preview(self, session: int, rec: Recording):
         if self.session != session:
             return
+        if lang.active() == "ru":
+            return  # the live preview is lip reading, and Russian is listening to the microphone
         rois = rois_for(rec)
         if rois is None:
             self.ui(self.hud.set_text, "Can't see your face…")
@@ -478,7 +536,8 @@ class Lipflow:
     def _final(self, rec: Recording):
         t0 = time.time()
         ob = self.onboarding  # the setup window can be closed meanwhile on the tk thread
-        problem = clip_problem(rec)
+        ru = lang.active() == "ru" and ob is None  # Russian reads the microphone, not the lips
+        problem = None if ru else clip_problem(rec)
         if problem and ob is not None:
             print(f"[lipflow] practice clip rejected ({rec.duration:.1f}s, {len(rec.ts)} frames, face in "
                   f"{rec.face_ratio:.0%}): {problem[0]}")
@@ -490,25 +549,31 @@ class Lipflow:
                   f"{rec.face_ratio:.0%}): {problem[0]}")
             self.ui(self.hud.show, "error", problem[0], problem[1], 2.2)
             return
-        rois = rois_for(rec)
-        enc = self.reader.encode(rois)
-        t_enc = time.time() - t0
-        if ob is not None:  # practice clip: keep it with its known text, don't paste
-            raw = self.reader.greedy(enc)
-            print(f"[lipflow] practice clip saved ({rec.duration:.1f}s): {raw!r}")
-            self.ui(ob.clip_done, True, "", rois, self.onboarding_text, raw)
-            self.ui(self.hud.hide)
-            return
-        # Whisper mode reads empty when there's no audible whisper (silent mouthing): fall back to lips
-        candidates = self._av_candidates(rec, rois)
-        if not candidates or not candidates[0]:
-            if candidates is not None:
-                print("[lipflow] lips + audio read nothing, using lips only")
-            candidates = self.reader.beam_search(enc, nbest=5)
+        rois, t_enc = None, 0.0
+        if ru:
+            candidates = self._ru_candidates(rec)
+        else:
+            rois = rois_for(rec)
+            enc = self.reader.encode(rois)
+            t_enc = time.time() - t0
+            if ob is not None:  # practice clip: keep it with its known text, don't paste
+                raw = self.reader.greedy(enc)
+                print(f"[lipflow] practice clip saved ({rec.duration:.1f}s): {raw!r}")
+                self.ui(ob.clip_done, True, "", rois, self.onboarding_text, raw)
+                self.ui(self.hud.hide)
+                return
+            # Whisper mode reads empty when there's no audible whisper (silent mouthing): fall back to lips
+            candidates = self._av_candidates(rec, rois)
+            if not candidates or not candidates[0]:
+                if candidates is not None:
+                    print("[lipflow] lips + audio read nothing, using lips only")
+                candidates = self.reader.beam_search(enc, nbest=5)
         t_beam = time.time() - t0 - t_enc
         if not candidates or not candidates[0]:
             print(f"[lipflow] {rec.duration:.1f}s clip: nothing read")
-            self.ui(self.hud.show, "error", "Couldn't read that", "Try again, a little slower", 2.2)
+            self.ui(self.hud.show, "error",
+                    "Ничего не расслышал" if ru else "Couldn't read that",
+                    "Попробуйте ещё раз, чуть медленнее" if ru else "Try again, a little slower", 2.2)
             return
         self.ui(self.hud.set_text, candidates[0].lower())
         ctx = self.ctx
@@ -517,7 +582,9 @@ class Lipflow:
         print(f"[lipflow] {rec.duration:.1f}s clip → raw: {candidates[0]!r}\n"
               f"          → typed: {text!r}  (encode {t_enc:.2f}s, beam {t_beam:.2f}s, total {t_all:.2f}s)")
         if not text:
-            self.ui(self.hud.show, "error", "Couldn't read that", "Try again, a little slower", 2.2)
+            self.ui(self.hud.show, "error",
+                    "Ничего не расслышал" if ru else "Couldn't read that",
+                    "Попробуйте ещё раз, чуть медленнее" if ru else "Try again, a little slower", 2.2)
             return
         out = text
         if self.last_paste_at and time.time() - self.last_paste_at < JOIN_WINDOW:
@@ -526,7 +593,8 @@ class Lipflow:
         self.last_paste_at = time.time()
         self.context.append(text)
         log_history(rec, candidates, text, t_all, self.cleaner.describe())
-        keep_clip(rois, candidates, text, self.settings)
+        if rois is not None:  # Russian has no mouth crops to keep
+            keep_clip(rois, candidates, text, self.settings)
         self.ui(paste_text if self.opts.paste else copy_text, out if self.opts.paste else text)
         self.ui(self.hud.show, "done", "Pasted" if self.opts.paste else "Copied", text, 2.4)
 
