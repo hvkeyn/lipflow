@@ -18,7 +18,7 @@ import sqlite3
 import sys
 from collections import Counter
 
-from . import vocab
+from . import lang, vocab
 
 from .paths import HOME as DIR
 PHRASES = os.path.join(DIR, "phrases.txt")
@@ -31,11 +31,9 @@ elif sys.platform == "linux":
     )
 else:
     WISPR_DIR = os.path.expanduser("~/Library/Application Support/Wispr Flow")
-_WORD = re.compile(r"[a-z0-9']+")
-
-
 def words_of(text: str) -> list[str]:
-    return _WORD.findall(text.lower())
+    """Words in any script (was [a-z0-9']+ only, which dropped every Cyrillic word)."""
+    return lang.words(text)
 
 
 # -- import ---------------------------------------------------------------------------
@@ -127,7 +125,7 @@ def suggest_words(phrases: list[str], min_count: int = 3) -> list[str]:
     """Words you capitalise mid-sentence again and again (names, products) → words.txt."""
     caps, lower = Counter(), Counter()
     for p in phrases:
-        toks = re.findall(r"[A-Za-z][A-Za-z0-9'\-]+", p)
+        toks = lang.tokens(p)
         for i, w in enumerate(toks):
             if w[0].isupper() and i > 0 and not w.isupper() and w.lower() not in ("i", "i'm", "i'll", "i've", "i'd"):
                 caps[w] += 1

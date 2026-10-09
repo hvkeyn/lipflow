@@ -18,9 +18,17 @@ _SINGLE = {**dict.fromkeys("pbm", "M"), **dict.fromkeys("fv", "F"), **dict.fromk
            **dict.fromkeys("kgcq", "K"), **dict.fromkeys("jy", "J"), "r": "W", "w": "W",
            **dict.fromkeys("ae", "A"), "i": "I", **dict.fromkeys("ou", "U"), "h": ""}
 
+# Russian: the same coarse classes, read off Cyrillic spelling. Russian needs no digraph table
+# (no "ch"/"sh" spelling), and ж/ш/щ/ч all sit in the postalveolar class the English table calls J.
+_RU_SINGLE = {**dict.fromkeys("пбм", "M"), **dict.fromkeys("фв", "F"),
+              **dict.fromkeys("тднцзсл", "T"), **dict.fromkeys("кгх", "K"),
+              **dict.fromkeys("жшщч", "J"), "р": "W", "й": "I",
+              "а": "A", "э": "A", **dict.fromkeys("иыеёюя", "I"), **dict.fromkeys("уо", "U")}
+_CYRILLIC = re.compile(r"[\u0400-\u04ff]")
 
-def visemes(word: str) -> str:
-    w = re.sub(r"[^a-z]", "", word.lower())
+
+def _visemes_en(w: str) -> str:
+    w = re.sub(r"[^a-z]", "", w)
     if len(w) > 3 and w.endswith("e") and w[-2] not in "aeiou":
         w = w[:-1]  # silent e: HALE is said "hail"
     out, i = [], 0
@@ -37,12 +45,30 @@ def visemes(word: str) -> str:
     return re.sub(r"(.)\1+", r"\1", s)  # doubled letters look like one
 
 
+def _visemes_ru(w: str) -> str:
+    w = re.sub(r"[^\u0400-\u04ff]", "", w)
+    s = "".join(_RU_SINGLE.get(c, "") for c in w)
+    return re.sub(r"(.)\1+", r"\1", s)
+
+
+def visemes(word: str) -> str:
+    """Coarse lip-shape sequence for a word, whichever script it is written in."""
+    w = word.lower()
+    return _visemes_ru(w) if _CYRILLIC.search(w) else _visemes_en(w)
+
+
 _DICT: "set[str] | None" = None
 
 
 def is_word(w: str) -> bool:
     """A real lowercase English word (macOS's /usr/share/dict/words; proper nouns there are
-    capitalised, so names like Mccall don't count). Misread names are almost always non-words."""
+    capitalised, so names like Mccall don't count). Misread names are almost always non-words.
+
+    Cyrillic has no bundled word list yet, so every Cyrillic word counts as a real word: name
+    snapping stays off in Russian, which is safer than replacing ordinary words with a name.
+    Custom words are still honoured by vocab.rerank and by the cleanup prompt."""
+    if _CYRILLIC.search(w):
+        return True
     global _DICT
     if _DICT is None:
         try:

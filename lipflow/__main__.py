@@ -5,6 +5,8 @@ import argparse
 import os
 import sys
 
+from . import lang
+
 os.environ.setdefault("GLOG_minloglevel", "2")  # quiet MediaPipe
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
 # OpenCV would ask for camera access from its capture thread, which silently fails; the app
@@ -47,6 +49,8 @@ def main(argv=None):
                         "or a video file")
     r.add_argument("--copy-only", action="store_true", help="copy to the clipboard instead of pasting")
     r.add_argument("--no-preview", action="store_true", help="don't show live words while you talk")
+    r.add_argument("--lang", choices=lang.available(), default=None,
+                   help="language the lip reader outputs (default: your saved setting, else English)")
 
     f = sub.add_parser("file", help="lip-read a video file")
     f.add_argument("video")
@@ -54,6 +58,8 @@ def main(argv=None):
     f.add_argument("--end", type=float, default=None)
     f.add_argument("--beam", type=int, default=10)
     f.add_argument("--cleanup", default="auto", choices=["auto", "claude", "codex", "local", "ollama", "basic", "none"])
+    f.add_argument("--lang", choices=lang.available(), default=None,
+                   help="language the lip reader outputs (default: your saved setting, else English)")
 
     sub.add_parser("doctor", help="check permissions, camera and model files")
     sub.add_parser("onboard", help="open the setup window (permissions, Wispr import, train on your face)")
@@ -66,6 +72,11 @@ def main(argv=None):
         argv.insert(0, "run")
     args = p.parse_args(argv)
     cmd = args.cmd
+
+    # One language for the whole text layer: word splitting, numbers, punctuation, prompts.
+    # --lang wins, then your saved setting; English stays the default.
+    from .dictation import load_settings
+    lang.set_active(getattr(args, "lang", None) or load_settings().get("lang"))
 
     if cmd == "file":
         from .offline import transcribe_file

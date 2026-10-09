@@ -15,6 +15,7 @@ import time
 
 import numpy as np
 
+from . import lang
 from .paths import HOME
 
 DIR = os.path.join(HOME, "clips", "corrections")
@@ -23,7 +24,7 @@ KEEP = 500
 
 
 def _words(t: str) -> list[str]:
-    return re.findall(r"[a-z0-9']+", t.lower())
+    return lang.words(t)
 
 
 def inserted_span(before: str, after: str) -> str:

@@ -55,12 +55,34 @@ HARVARD = [
     "Place a rosebush near the porch steps", "Both lost their lives in the raging storm",
 ]
 
+# Russian practice sentences, same idea: short, everyday, and between them covering every Russian
+# lip shape — п/б/м, ф/в, т/д/н/л, к/г/х, с/з/ц, ш/ж/ч/щ, р, ы/и, soft signs and every vowel.
+RUSSIAN = [
+    "Бабушка пекла пироги с малиной", "Ветер шумит в высоких травах",
+    "Мы вышли из дома рано утром", "Чашка чая стоит на столе",
+    "Жёлтый шар летит над рекой", "Дедушка читает газету у окна",
+    "Поезд прибывает ровно в полдень", "Щенок громко лает во дворе",
+    "Зимой темнеет очень рано", "Мама просила купить хлеб и молоко",
+    "Дети играют в мяч на площадке", "Летом мы часто ходим на речку",
+    "Тёплый дождь стучит по крыше", "Брат работает в большой больнице",
+    "Эта книга лежит в шкафу", "Собака спит у самой двери",
+    "Птицы улетают на юг осенью", "Часы на стене показывают полночь",
+    "Учитель объясняет новую тему", "Ты помнишь нашу первую встречу",
+    "Свежий воздух полезен для здоровья", "Кошка тихо сидит на подоконнике",
+    "Мы купили билеты на вечерний сеанс", "Ребёнок учится читать по слогам",
+    "Шишка упала с высокой сосны", "Дорога ведёт к старой мельнице",
+    "Он забыл ключи в куртке", "Зелёная трава блестит от росы",
+    "Каждый вечер мы гуляем по парку", "Бабушка связала тёплые носки",
+]
+
 
 def practice_sentences(n: int = N_SENTENCES) -> list[str]:
     """Half your own everyday sentences (from an imported Wispr Flow history: 5–12 words, no digits)
-    for your real vocabulary, half Harvard sentences for even coverage of lip shapes; all Harvard
-    if there's no history. Shuffled together."""
+    for your real vocabulary, half from the language's fixed list for even coverage of lip shapes;
+    all of the fixed list if there's no history. Shuffled together."""
+    from . import lang
     from .personal import PHRASES
+    bank = RUSSIAN if lang.active() == "ru" else HARVARD
     mine = []
     if os.path.exists(PHRASES):
         for line in open(PHRASES, encoding="utf-8"):
@@ -70,8 +92,8 @@ def practice_sentences(n: int = N_SENTENCES) -> list[str]:
                     mine.append(s.rstrip(".!?,"))
     random.shuffle(mine)
     own = list(dict.fromkeys(mine))[:n // 2]
-    harvard = random.sample(HARVARD, n - len(own))
-    out = own + harvard
+    fixed = random.sample(bank, n - len(own))
+    out = own + fixed
     random.shuffle(out)
     return out
 

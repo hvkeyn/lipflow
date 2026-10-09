@@ -40,12 +40,13 @@ GENERAL_SAMPLE = [  # TED/news-style text, for the forgetting check (from the pu
 
 
 def normalise(line: str) -> list[str]:
-    """Your text → LRS3-style sentences: upper case, letters and apostrophes, no digits."""
+    """Your text → LRS3-style sentences: upper case, letters and apostrophes, no digits.
+    Works for any script, so imported Russian phrases keep their Cyrillic."""
     out = []
     for sent in re.split(r"(?<=[.!?])\s+|\n", line):
         if re.search(r"\d", sent):
             continue  # LRS3 spells numbers out; skip rather than guess
-        s = re.sub(r"[^A-Za-z' ]+", " ", sent).upper()
+        s = re.sub(r"[^\w' ]+", " ", sent).upper()
         s = " ".join(w.strip("'") for w in s.split() if w.strip("'"))
         if len(s.split()) >= 2:
             out.append(s)

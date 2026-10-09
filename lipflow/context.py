@@ -13,6 +13,8 @@ import re
 import sys
 from dataclasses import dataclass, field
 
+from . import lang
+
 _STOP = set("""a an the and or but if of to in on at for with from by as is are was were be been am i
 you he she it we they me my your our their this that these those do does did have has had not no so
 just can will would could should there here what when where who how why all about up out then than
@@ -46,7 +48,7 @@ def extract_names(*texts: str, limit: int = 30) -> list[str]:
     seen, out = set(), []
     for t in texts:
         for sent in re.split(r"[.!?\n|•·—\-–:]+", t or ""):
-            toks = re.findall(r"[A-Za-z][A-Za-z'\-]+", sent)
+            toks = lang.name_tokens(sent)
             for i, w in enumerate(toks):
                 if not w[0].isupper() or w.isupper() and len(w) > 4:
                     continue

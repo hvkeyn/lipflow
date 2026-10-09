@@ -44,9 +44,11 @@ def _targets(reader: LipReader, text: str) -> list[int]:
     from .train_lm import Tok
     if not hasattr(reader, "_tok"):
         reader._tok = Tok(reader.token_list)
-    # Letters and apostrophes only, like the model's training text: punctuation would become <unk>
+    # Letters and apostrophes only, in any script, like the model's training text: punctuation and
+    # digits would become <unk>. The old [^A-Za-z' ] dropped every Cyrillic letter, so a Russian
+    # clip trained on an empty target.
     import re
-    clean = " ".join(re.sub(r"[^A-Za-z' ]+", " ", text).upper().split())
+    clean = " ".join(re.sub(r"[^\w' ]+", " ", re.sub(r"\d+", " ", text)).upper().split())
     return reader._tok(clean)
 
 
