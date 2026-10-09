@@ -376,6 +376,11 @@ _EN_UI = {
     "doctor_fix": "Fix the ✗ items above, then run `lipflow`.",
     "doctor_ru_ready": "Russian is transcribed from the microphone; your lips are not read",
     "doctor_ru_asr": "Russian recogniser (GigaAM v3 via onnx-asr)",
+    "doctor_model_file": "model file {rel}",
+    "doctor_torch": "torch {v}, encoder on {dev}",
+    "doctor_camera": "Camera {idx} opens and sends frames",
+    "doctor_cleanup": "cleanup backend: {desc}",
+    "doctor_cleanup_hint": "  (set ANTHROPIC_API_KEY or run Ollama for much better accuracy)",
 }
 
 _RU_UI = {
@@ -447,6 +452,11 @@ _RU_UI = {
     "doctor_fix": "Исправьте пункты с ✗ выше и запустите `lipflow`.",
     "doctor_ru_ready": "Русский распознаётся по микрофону; губы не читаются",
     "doctor_ru_asr": "Русский распознаватель (GigaAM v3 через onnx-asr)",
+    "doctor_model_file": "файл модели {rel}",
+    "doctor_torch": "torch {v}, энкодер на {dev}",
+    "doctor_camera": "Камера {idx} открывается и отдаёт кадры",
+    "doctor_cleanup": "обработка текста: {desc}",
+    "doctor_cleanup_hint": "  (задайте ANTHROPIC_API_KEY или запустите Ollama — точность заметно выше)",
 }
 
 UI = {"en": _EN_UI, "ru": _RU_UI}

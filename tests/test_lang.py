@@ -171,3 +171,17 @@ def test_no_interface_key_is_missing_from_the_catalog():
         used |= set(re.findall(r'lang\.t\(\s*"([a-z0-9_]+)"', p.read_text(encoding="utf-8")))
     assert used, "the scan found no lang.t() calls at all - the pattern is wrong"
     assert not (used - set(lang.UI["en"])), f"raw keys would show: {sorted(used - set(lang.UI['en']))}"
+
+
+def test_doctor_runs_in_both_languages(monkeypatch):
+    """The platform check helpers are module-level functions that call lang.t(). While `lang`
+    was only a local of doctor(), the English doctor died on the camera line with a NameError -
+    a bug no key or text scan could see, only running the thing."""
+    import lipflow.doctor as d
+
+    monkeypatch.setattr(d, "_windows_checks", lambda line: line(True, d.lang.t("doctor_camera", idx=0)))
+    monkeypatch.setattr(d, "_linux_checks", lambda line: line(True, d.lang.t("doctor_camera", idx=0)))
+    monkeypatch.setattr(d, "_mac_checks", lambda line: line(True, "camera"))
+    for code in ("en", "ru"):
+        d.lang.set_active(code)
+        assert d.doctor() in (0, 1)  # 1 only when a model file is missing

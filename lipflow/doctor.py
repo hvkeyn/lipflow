@@ -5,6 +5,7 @@ import os
 import shutil
 import sys
 
+from . import lang
 from .vsr import MODELS
 from .paths import WHO
 
@@ -24,16 +25,17 @@ def doctor() -> int:
     else:
         fix_models = "run ./setup.sh"
 
-    from . import lang
+    from . import lang  # noqa: F811  (module-level import kept for the check helpers below)
     print(lang.t("doctor_title") + "\n")
     for rel, size in [("vsr/model.pth", 900e6), ("lm/model.pth", 200e6), ("face_landmarker.task", 3e6)]:
         path = os.path.join(MODELS, rel)
-        line(os.path.exists(path) and os.path.getsize(path) > size, f"model file {rel}", fix_models)
+        line(os.path.exists(path) and os.path.getsize(path) > size,
+             lang.t("doctor_model_file", rel=rel), fix_models)
 
     import torch
     dev = "cuda (NVIDIA GPU)" if torch.cuda.is_available() else \
         "mps (Apple GPU)" if torch.backends.mps.is_available() else "cpu"
-    line(True, f"torch {torch.__version__}, encoder on {dev}")
+    line(True, lang.t("doctor_torch", v=torch.__version__, dev=dev))
 
     if sys.platform == "win32":
         _windows_checks(line)
@@ -42,7 +44,6 @@ def doctor() -> int:
     else:
         _mac_checks(line)
 
-    from . import lang
     if lang.active() == "ru":
         # Russian has no public visual model, so it listens instead of watching (see asr.py).
         from . import asr
@@ -51,8 +52,8 @@ def doctor() -> int:
 
     from .cleanup import Cleaner
     c = Cleaner()
-    line(True, f"cleanup backend: {c.describe()}"
-         + ("  (set ANTHROPIC_API_KEY or run Ollama for much better accuracy)" if c.backend == "basic" else ""))
+    line(True, lang.t("doctor_cleanup", desc=c.describe())
+         + (lang.t("doctor_cleanup_hint") if c.backend == "basic" else ""))
     print("\n" + (lang.t("doctor_ok") if ok else lang.t("doctor_fix")))
     return 0 if ok else 1
 
@@ -80,7 +81,7 @@ def _windows_checks(line):
     cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
     ok = cap.isOpened() and cap.read()[0]
     cap.release()
-    line(ok, f"Camera {idx} opens and sends frames",
+    line(ok, lang.t("doctor_camera", idx=idx),
          "Settings → Privacy & security → Camera → turn on \"Let desktop apps access your camera\", "
          "and close other apps using the camera")
 
@@ -111,5 +112,5 @@ def _linux_checks(line):
     cap = cv2.VideoCapture(idx)
     ok = cap.isOpened() and cap.read()[0]
     cap.release()
-    line(ok, f"Camera {idx} opens and sends frames",
+    line(ok, lang.t("doctor_camera", idx=idx),
          "check PipeWire/v4l2, close other apps using the camera, try --camera 0")
