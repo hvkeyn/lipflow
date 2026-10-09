@@ -147,8 +147,9 @@ def test_t_follows_the_language_and_falls_back():
 
 def test_the_russian_interface_is_not_just_english():
     identical = [k for k, v in lang.UI["en"].items() if lang.UI["ru"][k] == v]
-    # product names (Lipflow, Claude, Ollama, the Codex CLI) stay as they are; the rest must differ
-    assert identical == ["loading_title", "cleanup_claude", "cleanup_codex", "cleanup_ollama"], identical
+    # product names (Lipflow, Claude, DeepSeek, Ollama, the Codex CLI) stay as they are
+    assert identical == ["loading_title", "cleanup_claude", "cleanup_codex", "cleanup_deepseek",
+                         "cleanup_ollama"], identical
 
 
 def test_every_cleanup_backend_has_a_label():

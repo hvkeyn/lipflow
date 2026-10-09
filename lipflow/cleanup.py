@@ -6,12 +6,16 @@ for "while in office"). An LLM that sees the top hypotheses plus what you dictat
 before can usually recover the intended sentence.
 
 Backends. You pick one in the menu (saved as "cleanup" in settings) or with --cleanup; "auto" uses
-the first available of claude, local, ollama, basic:
-  claude  – ANTHROPIC_API_KEY (or ANTHROPIC_AUTH_TOKEN) set
-  codex   – your ChatGPT plan through the Codex CLI (`codex login`); LIPFLOW_CODEX_MODEL; only if chosen
-  local   – a tiny on-device model via MLX (Qwen3-0.6B 4-bit, ~350 MB, ~0.2 s); LIPFLOW_LOCAL_MODEL
-  ollama  – a local Ollama server on :11434 (LIPFLOW_OLLAMA_MODEL, default qwen3:4b); only if chosen
-  basic   – offline casing + punctuation rules
+the first available of claude, deepseek, local, ollama, basic:
+  claude   – ANTHROPIC_API_KEY (or ANTHROPIC_AUTH_TOKEN) set
+  codex    – your ChatGPT plan through the Codex CLI (`codex login`); LIPFLOW_CODEX_MODEL; only if chosen
+  deepseek – DEEPSEEK_API_KEY set; LIPFLOW_DEEPSEEK_MODEL (deepseek-chat), LIPFLOW_DEEPSEEK_URL
+  local    – a tiny on-device model via MLX (Qwen3-0.6B 4-bit, ~350 MB, ~0.2 s); LIPFLOW_LOCAL_MODEL
+  ollama   – a local Ollama server on :11434 (LIPFLOW_OLLAMA_MODEL, default qwen3:4b); only if chosen
+  basic    – offline casing + punctuation rules
+
+None of these reads lips. They repair what a lip reader has already proposed, which is why they
+cannot bring a language the visual model does not know: see the lip reader's own notes in vsr.py.
 """
 from __future__ import annotations
 
@@ -114,14 +118,16 @@ def basic_cleanup(text: str) -> str:
 
 
 # The cleanup menu, in order. "auto" picks for you (see the docstring above).
-CHOICES = {"auto": "Automatic", "claude": "Claude", "codex": "ChatGPT (Codex CLI)", "local": "On-device model",
-           "ollama": "Ollama", "basic": "Basic rules only"}
+CHOICES = {"auto": "Automatic", "claude": "Claude", "codex": "ChatGPT (Codex CLI)", "deepseek": "DeepSeek",
+           "local": "On-device model", "ollama": "Ollama", "basic": "Basic rules only"}
 
 
 def unavailable(backend: str) -> "str | None":
     """Why this backend can't be used right now, or None. Cheap: runs when the menu is built."""
     if backend == "claude" and not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")):
         return "set ANTHROPIC_API_KEY"
+    if backend == "deepseek" and not os.environ.get("DEEPSEEK_API_KEY"):
+        return "set DEEPSEEK_API_KEY"
     if backend == "codex" and not shutil.which("codex"):
         return "install the Codex CLI"
     if backend == "local" and sys.platform != "darwin":
@@ -152,6 +158,8 @@ class Cleaner:
             self.model = os.environ.get("LIPFLOW_MODEL", "claude-opus-5-5")
         elif self.backend == "codex":
             self.model = os.environ.get("LIPFLOW_CODEX_MODEL")  # None: Codex's own default
+        elif self.backend == "deepseek":
+            self.model = os.environ.get("LIPFLOW_DEEPSEEK_MODEL", "deepseek-chat")
         elif self.backend == "ollama":
             self.model = os.environ.get("LIPFLOW_OLLAMA_MODEL", "qwen3:4b")
 
@@ -170,6 +178,8 @@ class Cleaner:
             print(f"[cleanup] can't use {backend} ({why}); picking automatically")
         if os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"):
             return "claude"
+        if os.environ.get("DEEPSEEK_API_KEY"):
+            return "deepseek"
         try:
             import mlx_lm  # noqa: F401  (Apple Silicon only)
             return "local"
@@ -222,6 +232,8 @@ class Cleaner:
                 out = self._claude(candidates, context)
             elif self.backend == "codex":
                 out = self._codex(candidates, context)
+            elif self.backend == "deepseek":
+                out = self._deepseek(candidates, context)
             elif self.backend == "ollama":
                 out = self._ollama(candidates, context)
             else:
@@ -260,6 +272,30 @@ class Cleaner:
                 raise RuntimeError(f"codex exited {r.returncode}: {r.stderr.strip()[-200:]}")
             text = open(out, encoding="utf-8").read().strip() if os.path.exists(out) else ""
         return text if text and not text.isupper() else None
+
+    def _deepseek(self, candidates: list[str], context: str) -> "str | None":
+        """DeepSeek's API is OpenAI-compatible, so this is one POST with a bearer token.
+
+        DEEPSEEK_API_KEY is the key; LIPFLOW_DEEPSEEK_MODEL picks the model (deepseek-chat by
+        default, deepseek-reasoner for the thinking one) and LIPFLOW_DEEPSEEK_URL an endpoint."""
+        key = os.environ.get("DEEPSEEK_API_KEY")
+        if not key:
+            raise RuntimeError("DEEPSEEK_API_KEY is not set")
+        r = requests.post(
+            os.environ.get("LIPFLOW_DEEPSEEK_URL", "https://api.deepseek.com/chat/completions"),
+            timeout=20,
+            headers={"Authorization": f"Bearer {key}"},
+            json={
+                "model": self.model,
+                "stream": False,
+                "temperature": 0,
+                "messages": [{"role": "system", "content": _system()},
+                             {"role": "user", "content": _user_prompt(candidates, context, self._words, self._similar)}],
+            },
+        )
+        r.raise_for_status()
+        text = r.json()["choices"][0]["message"]["content"]
+        return re.sub(r"<think>.*?</think>", "", text, flags=re.S).strip() or None
 
     def _local(self, candidates: list[str], context: str) -> "str | None":
         from mlx_lm import generate

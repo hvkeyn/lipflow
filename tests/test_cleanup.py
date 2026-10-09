@@ -151,6 +151,7 @@ def test_backend_is_your_choice(monkeypatch):
     from lipflow.cleanup import Cleaner
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("ANTHROPIC_AUTH_TOKEN", raising=False)
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     monkeypatch.setattr(Cleaner, "_ollama_up", staticmethod(lambda: False))
     monkeypatch.setattr(cleanup.shutil, "which", lambda name: "/usr/local/bin/codex")
     assert Cleaner("auto").backend != "codex"
@@ -159,3 +160,59 @@ def test_backend_is_your_choice(monkeypatch):
     assert Cleaner("claude").backend == Cleaner("auto").backend
     monkeypatch.setattr(cleanup.shutil, "which", lambda name: None)
     assert cleanup.unavailable("codex") and Cleaner("codex").backend == Cleaner("auto").backend
+
+
+def test_deepseek_sends_the_guesses_and_takes_the_reply(monkeypatch):
+    """DeepSeek's API is OpenAI-compatible: one POST with a bearer token."""
+    from lipflow import cleanup
+    from lipflow.cleanup import Cleaner
+
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    calls = []
+
+    class Resp:
+        def raise_for_status(self): pass
+
+        def json(self):
+            return {"choices": [{"message": {"content": "Hi Priya, can we meet at 4:30?\n"}}]}
+
+    monkeypatch.setattr(cleanup.requests, "post", lambda url, **kw: (calls.append((url, kw)), Resp())[1])
+    c = Cleaner("deepseek")
+    assert c.backend == "deepseek"
+    assert c(["HI PRE A CAN WE MEET AT FOUR THIRTY"], words=[]) == "Hi Priya, can we meet at 4:30?"
+
+    url, kw = calls[0]
+    assert url.startswith("https://api.deepseek.com/")
+    assert kw["headers"]["Authorization"] == "Bearer test-key"
+    assert kw["json"]["model"] == "deepseek-chat"
+    assert kw["json"]["stream"] is False
+    assert kw["json"]["messages"][0]["role"] == "system"
+    assert "HI PRE A CAN WE MEET AT FOUR THIRTY" in kw["json"]["messages"][1]["content"]
+
+
+def test_deepseek_failure_falls_back_to_basic(monkeypatch):
+    from lipflow import cleanup
+    from lipflow.cleanup import Cleaner
+
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+
+    def boom(*a, **k):
+        raise RuntimeError("network down")
+
+    monkeypatch.setattr(cleanup.requests, "post", boom)
+    assert Cleaner("deepseek")(["WHAT TIME IS IT"], words=[]) == "What time is it?"
+
+
+def test_deepseek_needs_a_key_and_is_picked_when_it_is_the_only_one(monkeypatch):
+    from lipflow import cleanup
+    from lipflow.cleanup import Cleaner
+
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    assert cleanup.unavailable("deepseek") == "set DEEPSEEK_API_KEY"
+
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "k")
+    assert cleanup.unavailable("deepseek") is None
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_AUTH_TOKEN", raising=False)
+    monkeypatch.setattr(Cleaner, "_ollama_up", staticmethod(lambda: False))
+    assert Cleaner("auto").backend == "deepseek"
