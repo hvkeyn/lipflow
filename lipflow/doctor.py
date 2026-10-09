@@ -24,7 +24,8 @@ def doctor() -> int:
     else:
         fix_models = "run ./setup.sh"
 
-    print("Lipflow doctor\n")
+    from . import lang
+    print(lang.t("doctor_title") + "\n")
     for rel, size in [("vsr/model.pth", 900e6), ("lm/model.pth", 200e6), ("face_landmarker.task", 3e6)]:
         path = os.path.join(MODELS, rel)
         line(os.path.exists(path) and os.path.getsize(path) > size, f"model file {rel}", fix_models)
@@ -45,14 +46,14 @@ def doctor() -> int:
     if lang.active() == "ru":
         # Russian has no public visual model, so it listens instead of watching (see asr.py).
         from . import asr
-        line(asr.available(), "Russian recogniser (GigaAM v3 via onnx-asr)", asr.INSTALL_HINT)
-        line(True, "Russian reads the microphone; the camera is not used")
+        line(asr.available(), lang.t("doctor_ru_asr"), asr.INSTALL_HINT)
+        line(True, lang.t("doctor_ru_ready"))
 
     from .cleanup import Cleaner
     c = Cleaner()
     line(True, f"cleanup backend: {c.describe()}"
          + ("  (set ANTHROPIC_API_KEY or run Ollama for much better accuracy)" if c.backend == "basic" else ""))
-    print("\nAll good." if ok else "\nFix the ✗ items above, then run `lipflow`.")
+    print("\n" + (lang.t("doctor_ok") if ok else lang.t("doctor_fix")))
     return 0 if ok else 1
 
 

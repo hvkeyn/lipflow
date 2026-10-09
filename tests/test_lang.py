@@ -115,3 +115,59 @@ def test_cleanup_prompt_follows_the_language():
 
     lang.set_active("en")
     assert _user_prompt(["A B"], "").startswith("Candidates:")
+
+
+# -- the interface ----------------------------------------------------------------------
+def test_every_interface_string_is_translated():
+    missing = [k for k in lang.UI["en"] if k not in lang.UI["ru"]]
+    assert not missing, f"no Russian for: {missing}"
+
+
+def test_interface_placeholders_match_between_languages():
+    """A key that lost its {placeholder} would silently drop the key name or the percentage."""
+    import re
+
+    fields = lambda s: set(re.findall(r"\{(\w+)", s))
+    for key, en in lang.UI["en"].items():
+        assert fields(en) == fields(lang.UI["ru"][key]), key
+
+
+def test_t_follows_the_language_and_falls_back():
+    lang.set_active("en")
+    assert lang.t("menu_quit") == "Quit Lipflow"
+    assert lang.t("hold_hint", key="Right Ctrl") == "Hold Right Ctrl to dictate, double-tap for hands-free"
+
+    lang.set_active("ru")
+    assert lang.t("menu_quit") == "Выйти из Lipflow"
+    assert lang.t("hold_hint", key="Right Ctrl") == "Держите Right Ctrl для диктовки, двойное нажатие — без рук"
+    assert lang.t("hold_hint", key="Right Ctrl", code="en").startswith("Hold")
+    # an unknown key must show itself, never a crash
+    assert lang.t("no_such_key") == "no_such_key"
+
+
+def test_the_russian_interface_is_not_just_english():
+    identical = [k for k, v in lang.UI["en"].items() if lang.UI["ru"][k] == v]
+    # product names (Lipflow, Claude, Ollama, the Codex CLI) stay as they are; the rest must differ
+    assert identical == ["loading_title", "cleanup_claude", "cleanup_codex", "cleanup_ollama"], identical
+
+
+def test_every_cleanup_backend_has_a_label():
+    """The tray builds these keys from cleanup.CHOICES: a gap would print "cleanup_ollama"."""
+    from lipflow.cleanup import CHOICES
+
+    for name in CHOICES:
+        assert lang.UI["en"].get(f"cleanup_{name}"), name
+        assert lang.UI["ru"].get(f"cleanup_{name}"), name
+
+
+def test_no_interface_key_is_missing_from_the_catalog():
+    """Every lang.t("...") in the source must exist in the catalog."""
+    import pathlib
+    import re
+
+    root = pathlib.Path(__file__).resolve().parent.parent / "lipflow"
+    used = set()
+    for p in root.rglob("*.py"):
+        used |= set(re.findall(r'lang\.t\(\s*"([a-z0-9_]+)"', p.read_text(encoding="utf-8")))
+    assert used, "the scan found no lang.t() calls at all - the pattern is wrong"
+    assert not (used - set(lang.UI["en"])), f"raw keys would show: {sorted(used - set(lang.UI['en']))}"
